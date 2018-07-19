@@ -11,6 +11,34 @@ load_experience_csv <- function(input) {
   }
   tmp <- read_csv(infile$datapath)
   
+  # If file is really raw use the median
+  if ("series_id" %in% colnames(tmp)) {
+    tmp <- 
+      tmp %>%
+      select(-c(view_option, experiment, camera)) %>%
+      mutate_if(is.character, str_to_lower) %>%
+      mutate_if(is.character, as.factor) %>%
+      group_by(series_id) %>%
+      mutate_if(is.numeric, median) %>%
+      ungroup() %>%
+      select(-c(series_id)) %>%
+      distinct()
+  }
+  
+  if (("treatment" %in% colnames(tmp)) & 
+      ("genotype" %in% colnames(tmp)) &
+      (!"condition" %in% colnames(tmp))) {
+    tmp <- 
+      tmp %>% 
+      mutate(condition = treatment) %>%
+      mutate(treatment = sprintf("%s - %s", genotype, condition))
+  } else {
+    # If needed ad a treatment column
+    if (!"treatment" %in% colnames(tmp)) {
+      tmp <- tmp %>% mutate(treatment = "No Data")
+    }
+  }
+  
   # Build day after start if not present
   if (!("day_after_start" %in% colnames(tmp))) {
     if("date_time" %in% colnames(tmp)) {
@@ -27,7 +55,6 @@ load_experience_csv <- function(input) {
     if (!("treatment_value" %in% colnames(tmp))) {
       tmp <- tmp %>% mutate(treatment_value = as.numeric(as.factor(treatment)))
     }
-    
   }
   
   # If disease index exists create natural version
@@ -43,11 +70,13 @@ load_experience_csv <- function(input) {
   }
   
   # Remove experiment if only one is present
-  df <- tmp %>% select(experiment)
-  df <- df[!(duplicated(df) | duplicated(df, fromLast = FALSE)), ]
-  cb_options = as.list(levels(df))
-  if(length(cb_options) == 1) {
-    tmp <- tmp %>% select(-c(experiment))
+  if ("experiment" %in% colnames(tmp)) {
+    df <- tmp %>% select(experiment)
+    df <- df[!(duplicated(df) | duplicated(df, fromLast = FALSE)), ]
+    cb_options = as.list(levels(df))
+    if(length(cb_options) == 1) {
+      tmp <- tmp %>% select(-c(experiment))
+    }
   }
   
   # Create natural version of day after start

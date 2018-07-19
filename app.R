@@ -70,7 +70,7 @@ server <- function(input, output) {
     load_experience_csv(input)
   })
   
-  # Populate plants selector
+  # Populate treatment selector
   output$cbTreatmentSelection <- renderUI({
     df <-filedata()
     if (is.null(df)) return(NULL)
