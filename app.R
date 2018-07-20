@@ -44,7 +44,7 @@ ui <- pageWithSidebar(
     
     uiOutput("chkShowPlantName"),
     
-    uiOutput("chkSplitByTime"),
+    uiOutput("cbSplitScatter"),
     uiOutput("cbDateTimeSelector"),
     
     tags$head(tags$style("#plant_plots{height:80vh !important;}"))
@@ -127,37 +127,11 @@ server <- function(input, output) {
     checkboxInput("chkShowPlantName", "Show plant name (if all dots are displayed graph will become cluttered", FALSE)
   })
   
-  output$chkSplitByTime <- renderUI({
-    df <-filedata()
-    if (is.null(df)) return(NULL)
-    checkboxInput("chkSplitByTime", "Split plots by datetime (Does not work with marginals)", FALSE)
-  })
-  
   output$cbDateTimeSelector <- renderUI({
     df <-filedata()
     if (is.null(df)) return(NULL)
     
-    df <- df %>% select(trunc_day_after_start)
-    df <- df[!(duplicated(df) | duplicated(df, fromLast = FALSE)), ]
-    
-    cb_options = as.list(levels(df))
-    if(length(cb_options) == 0) {
-      cb_options <- as.list(df$trunc_day_after_start)
-    }
-    pickerInput(
-      inputId = "cbDateTimeSelector", 
-      label = "Select days to be displayed",
-      choices = cb_options,
-      options = list(
-        `selected-text-format` = "count > 3",
-        `count-selected-text` = "{0} attributes selelcted",
-        `actions-box` = TRUE,
-        `deselect-all-text` = "Select none",
-        `select-all-text` = "Select all"
-      ), 
-      selected = cb_options,
-      multiple = TRUE
-    )
+    fill_time_selection(df)
   })
   
   output$cbMarginal <- renderUI({
@@ -166,19 +140,12 @@ server <- function(input, output) {
     fill_marginal_cb()
   })
   
-  
-  output$timePointSelector <- renderUI({
+  # Populate scatter selector
+  output$cbSplitScatter <- renderUI({
     df <-filedata()
     if (is.null(df)) return(NULL)
     
-    tags$hr()
-    max_time <- trunc(max(df$trunc_day_after_start))
-    sliderInput(inputId =  "timePointSelector",
-                label = NULL,
-                min = 0,
-                max = max_time,
-                value = max_time / 2,
-                step = 1)
+    build_string_selectImput(df, "cbSplitScatter",  "Separate graphs using:", "treament", c("none", "trunc_day_after_start"))
   })
   
   # Here it renders
@@ -213,7 +180,7 @@ server <- function(input, output) {
                               # color="treatment", 
                               fill="treatment"))
       
-      if (input$chkSplitByTime) {
+      if (input$cbSplitScatter != "none"){
         gg <- gg + geom_boxplot()
       } else {
         gg <- gg + geom_violin(alpha = 0.2)
@@ -230,8 +197,11 @@ server <- function(input, output) {
                                    segment.color = "grey")
       }
 
-      if (input$chkSplitByTime) {
-        gg <- gg + facet_wrap("trunc_day_after_start")      
+      
+      
+      # Scatter the PCA
+      if (input$cbSplitScatter != "none"){
+        gg <- gg +  facet_wrap(input$cbSplitScatter)
       }
       
       gg 
@@ -243,7 +213,7 @@ server <- function(input, output) {
                                               y = secVar, 
                                               color="treatment"))
       gg <- gg + geom_point(alpha = .3, aes_string(size = dotSize))
-      if (!input$chkSplitByTime) {
+      if (input$cbSplitScatter == "none"){
         gg <- gg + geom_point(data = gd, size = 16)
         gg <- gg + geom_label_repel(data = gd, 
                                     aes(label = treatment, color=treatment),
@@ -261,8 +231,8 @@ server <- function(input, output) {
       }
       
       if (input$cbMarginal == 'none') {
-        if (input$chkSplitByTime) {
-          gg <- gg + facet_wrap("trunc_day_after_start")      
+        if (input$cbSplitScatter != "none"){
+          gg <- gg +  facet_wrap(input$cbSplitScatter)
         }
         gg  
       } else {

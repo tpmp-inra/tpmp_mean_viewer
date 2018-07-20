@@ -11,6 +11,9 @@ load_experience_csv <- function(input) {
   }
   tmp <- read_csv(infile$datapath)
   
+  # Factorize all and set all strings to lower case
+  
+  
   # If file is really raw use the median
   if ("series_id" %in% colnames(tmp)) {
     tmp <- 
@@ -114,6 +117,31 @@ fill_treatment_selection <- function(df,
   
 }
 
+fill_time_selection <- function(df, input_id = "cbDateTimeSelector", label_id = "Select days to be displayed") {
+  df <- df %>% select(trunc_day_after_start)
+  df <- df[!(duplicated(df) | duplicated(df, fromLast = FALSE)), ]
+  
+  cb_options = as.list(levels(df))
+  if(length(cb_options) == 0) {
+    cb_options <- as.list(df$trunc_day_after_start)
+  }
+  cb_options <- cb_options[mixedorder(unlist(cb_options),decreasing=F)]
+  pickerInput(
+    inputId = input_id, 
+    label = label_id,
+    choices = cb_options,
+    options = list(
+      `selected-text-format` = "count > 3",
+      `count-selected-text` = "{0} attributes selelcted",
+      `actions-box` = TRUE,
+      `deselect-all-text` = "Select none",
+      `select-all-text` = "Select all"
+    ), 
+    selected = cb_options,
+    multiple = TRUE
+  )
+}
+
 fill_plant_selection <- function(df, 
                                  input_id="cbPlantSelection", 
                                  label_id="Select plants to be displayed", 
@@ -172,12 +200,34 @@ fill_marginal_cb <- function(input_id="cbMarginal") {
               selected = "none")
 }
 
-build_string_selectImput <- function(df,  input_id,  label_id, selected_item, add_none=TRUE) {
+fill_palette_selector <- function(input_id="cbPaletteSelector") {
+  selectInput(input_id,
+              "Color Palette:",
+              c("Accent" = "Accent",
+                "Spectral" = "Spectral",
+                "RdYlGn" = "RdYlGn",
+                "RdYlBu" = "RdYlBu",
+                "Set1" = "Set1",
+                "Set2" = "Set2",
+                "Set3" = "Set3",
+                "Pastel1" = "Pastel1",
+                "Pastel2" = "Pastel2",
+                "Paired" = "Paired",
+                "Dark2" = "Dark2",
+                "Blues" = "Blues"
+              ))
+}
+
+build_string_selectImput <- function(df,  
+                                     input_id,
+                                     label_id, 
+                                     selected_item, 
+                                     add_items = c("none")) {
   stringDf <- df[sapply(df,is.character)]
   stringDf <- stringDf[, !(colnames(stringDf) %in% c("date_time"))]
   dsnames <- names(stringDf)
-  if (add_none) {
-    cb_choices <- c("None", as.list(dsnames))
+  if (length(add_items) > 0) {
+    cb_choices <- c(add_items, as.list(dsnames))
   } else {
     cb_choices <- as.list(dsnames)
   }
