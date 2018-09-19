@@ -36,6 +36,7 @@ ui <- pageWithSidebar(
                        ".csv")),
     
     uiOutput("cbTreatmentSelection"),
+    uiOutput("cbPlantSelection"),
     
     uiOutput("visualizedVariable"),
     uiOutput("secondaryVariable"),
@@ -70,6 +71,41 @@ server <- function(input, output) {
     load_experience_csv(input)
   })
   
+  # Print observation details
+  output$observationInfo <- renderTable({
+    df <-filteredData()
+    if (is.null(df)) return(NULL)
+    
+    nearPoints(df$df, input$plot_hover)
+  })
+  
+  filteredData <- reactive({
+    req(input$cbTreatmentSelection, input$visualizedVariable, input$dotSize)
+    
+    df <-filedata()
+    if (is.null(df)) return(NULL)
+    mainVar <- input$visualizedVariable
+    if (is.null(mainVar)) return(NULL)
+    secVar <- input$secondaryVariable
+    if (is.null(secVar)) return(NULL)
+    dotSize <- input$dotSize
+    if (is.null(dotSize)) return(NULL)
+    selPlant <- input$cbPlantSelection
+    if (is.null(selPlant)) return(NULL)
+    
+    plants_to_plot <- 
+      df %>%
+      filter(treatment %in% input$cbTreatmentSelection) %>%
+      filter(trunc_day_after_start %in% input$cbDateTimeSelector)%>%
+      filter(plant %in% selPlant)
+    
+    return(list(df = plants_to_plot,
+                mainVar = mainVar,
+                secVar = secVar,
+                dotSize = dotSize,
+                selPlant = selPlant))
+  })
+  
   # Populate treatment selector
   output$cbTreatmentSelection <- renderUI({
     df <-filedata()
@@ -79,6 +115,14 @@ server <- function(input, output) {
                              "cbTreatmentSelection",
                              "Select treatments to be displayed",
                              "count > 3")
+  })
+  
+  # Populate plants selector
+  output$cbPlantSelection <- renderUI({
+    df <-filedata()
+    if (is.null(df)) return(NULL)
+    
+    fill_plant_selection(df)
   })
   
   #The following set of functions populate the x axis selectors
@@ -152,31 +196,18 @@ server <- function(input, output) {
   output$plant_plots = renderPlot({
     req(input$cbTreatmentSelection, input$visualizedVariable, input$dotSize)
     
-    df <-filedata()
-    if (is.null(df)) return(NULL)
-    mainVar <- input$visualizedVariable
-    if (is.null(mainVar)) return(NULL)
-    secVar <- input$secondaryVariable
-    if (is.null(secVar)) return(NULL)
-    dotSize <- input$dotSize
-    if (is.null(dotSize)) return(NULL)
+    ptp <- filteredData()
     
-    # Filter by selected plants
-    plants_to_plot <- df %>% filter(treatment %in% input$cbTreatmentSelection)
-    
-    # Filter by time
-    plants_to_plot <- filter(plants_to_plot, trunc_day_after_start %in% input$cbDateTimeSelector)
-
-    if (secVar == "none") {
+    if (ptp$secVar == "none") {
       # Get the means
-      gd <- plants_to_plot %>%
+      gd <- ptp$df %>%
         group_by(treatment) %>%
-        summarise_at(.vars = mainVar, .funs = mean)
+        summarise_at(.vars = ptp$mainVar, .funs = mean)
       
       # Plot
-      gg <- ggplot(plants_to_plot, 
+      gg <- ggplot(ptp$df, 
                    aes_string(x = "treatment", 
-                              y = mainVar, 
+                              y = ptp$mainVar, 
                               # color="treatment", 
                               fill="treatment"))
       
@@ -187,17 +218,15 @@ server <- function(input, output) {
         gg <- gg + geom_boxplot(width = 0.2)
       }
       
-      gg <- gg + geom_jitter(aes_string(size = dotSize), width = 0.3, alpha = 0.3)
+      gg <- gg + geom_jitter(aes_string(size = ptp$dotSize), width = 0.3, alpha = 0.3)
       
       if (input$chkShowPlantName) {
-        gg <- gg + geom_text_repel(data = plants_to_plot,
+        gg <- gg + geom_text_repel(data = ptp$df,
                                    aes(label = plant),
                                    color = "black",
                                    size = 3.5,
                                    segment.color = "grey")
       }
-
-      
       
       # Scatter the PCA
       if (input$cbSplitScatter != "none"){
@@ -206,13 +235,13 @@ server <- function(input, output) {
       
       gg 
     } else {
-      gd <- plants_to_plot %>% 
+      gd <- ptp$df %>% 
         group_by(treatment) %>% 
-        summarise_at(.vars = c(mainVar, secVar), .funs = mean)
-      gg <- ggplot(plants_to_plot, aes_string(x = mainVar, 
-                                              y = secVar, 
-                                              color="treatment"))
-      gg <- gg + geom_point(alpha = .3, aes_string(size = dotSize))
+        summarise_at(.vars = c(ptp$mainVar, ptp$secVar), .funs = mean)
+      gg <- ggplot(ptp$df, aes_string(x = ptp$mainVar, 
+                                      y = ptp$secVar, 
+                                      color="treatment"))
+      gg <- gg + geom_point(alpha = .3, aes_string(size = ptp$dotSize))
       if (input$cbSplitScatter == "none"){
         gg <- gg + geom_point(data = gd, size = 16)
         gg <- gg + geom_label_repel(data = gd, 
@@ -223,7 +252,7 @@ server <- function(input, output) {
       }
       
       if (input$chkShowPlantName) {
-        gg <- gg + geom_text_repel(data = plants_to_plot,
+        gg <- gg + geom_text_repel(data = ptp$df,
                                    aes(label = plant, color=treatment),
                                    # color = "black",
                                    size = 3.5,
