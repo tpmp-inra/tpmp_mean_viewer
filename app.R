@@ -20,10 +20,9 @@ library(broom)
 library(Rtsne)
 library(factoextra)
 library(cluster)
-library(shinyCommon)
 library(gtools)
 
-# source("./shiny_common.R")
+source('./shiny_common_all.R')
 
 # Define UI for application that draws a histogram
 ui <- pageWithSidebar(
@@ -41,6 +40,8 @@ ui <- pageWithSidebar(
     
     uiOutput("cbTreatmentSelection"),
     uiOutput("cbPlantSelection"),
+    
+    uiOutput("cbNormalizationMethod"),
     
     uiOutput("visualizedVariable"),
     uiOutput("secondaryVariable"),
@@ -103,6 +104,25 @@ server <- function(input, output) {
       filter(trunc_day_after_start %in% input$cbDateTimeSelector)%>%
       filter(plant %in% selPlant)
     
+    # Normalize
+    if (secVar == "none") {
+      yv = c(mainVar)
+    } else {
+      yv = c(mainVar, secVar)
+    }
+    if (input$cbNormalizationMethod == "normalization") {
+      normalize <- function(x) {
+        return((x-min(x)) / (max(x)-min(x)))
+      }
+      plants_to_plot <- plants_to_plot %>% mutate_at(vars(yv), funs(normalize(.) %>% as.vector))
+    } else {
+      if (input$cbNormalizationMethod == "scale") {
+        plants_to_plot <- plants_to_plot %>% mutate_at(vars(yv), funs(scale(.) %>% as.vector))
+      }
+    }
+    
+    if (dotSize == 'none') dotSize <- NULL
+    
     return(list(df = plants_to_plot,
                 mainVar = mainVar,
                 secVar = secVar,
@@ -127,6 +147,12 @@ server <- function(input, output) {
     if (is.null(df)) return(NULL)
     
     fill_plant_selection(df)
+  })
+  
+  output$cbNormalizationMethod <- renderUI({
+    df <-filedata()
+    if (is.null(df)) return(NULL)
+    fill_normalization_cb()
   })
   
   #The following set of functions populate the x axis selectors
@@ -157,16 +183,8 @@ server <- function(input, output) {
   output$dotSize <- renderUI({
     df <-filedata()
     if (is.null(df)) return(NULL)
-    new_df <- df[sapply(df,is.numeric)]
-    dsnames <- names(new_df)
-    cb_options <- list()
-    cb_options[ dsnames] <- dsnames
-    if("disease_index" %in% colnames(new_df)) {
-      selectedOption <- "disease_index"
-    } else {
-      selectedOption <- "shape_solidity"
-    }
-    selectInput("dotSize", "Dot Size:", choices = cb_options, selected = selectedOption)
+    
+    build_numeric_selectImput(df, "dotSize", "Dot Size:", "none")
   })
   
   output$chkShowPlantName <- renderUI({
@@ -237,6 +255,12 @@ server <- function(input, output) {
         gg <- gg +  facet_wrap(input$cbSplitScatter)
       }
       
+      gg <- gg + theme(legend.title = element_text(size=32, face = "bold"),
+                       legend.text=element_text(size=30),
+                       axis.text=element_text(size=10),
+                       axis.title=element_text(size=22,face="bold"),
+                       title = element_text(size=20))
+      
       gg 
     } else {
       gd <- ptp$df %>% 
@@ -262,6 +286,12 @@ server <- function(input, output) {
                                    size = 3.5,
                                    segment.color = "grey")
       }
+      
+      gg <- gg + theme(legend.title = element_text(size=32, face = "bold"),
+                       legend.text=element_text(size=30),
+                       axis.text=element_text(size=20),
+                       axis.title=element_text(size=22,face="bold"),
+                       title = element_text(size=20))
       
       if (input$cbMarginal == 'none') {
         if (input$cbSplitScatter != "none"){

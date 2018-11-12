@@ -5,8 +5,8 @@ account: tpmp
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 374430
-bundleId: 1490821
+bundleId: 1674011
 url: https://tpmp.shinyapps.io/variable_mean_viewer/
-when: 1532073045.46182
+when: 1540987174.04137
 asMultiple: FALSE
 asStatic: FALSE
