@@ -40,6 +40,7 @@ ui <- pageWithSidebar(
     
     uiOutput("cbTreatmentSelection"),
     uiOutput("cbPlantSelection"),
+    uiOutput("chkShowOutliers"),
     
     uiOutput("cbNormalizationMethod"),
     
@@ -71,6 +72,8 @@ ui <- pageWithSidebar(
 # Define server logic required to draw a histogram
 server <- function(input, output) {
    
+  options(shiny.maxRequestSize=30*1024^2) # Still not sure it's a good idea
+  
   #This function is repsonsible for loading in the selected file
   filedata <- reactive({
     load_experience_csv(input)
@@ -103,6 +106,10 @@ server <- function(input, output) {
       filter(treatment %in% input$cbTreatmentSelection) %>%
       filter(trunc_day_after_start %in% input$cbDateTimeSelector)%>%
       filter(plant %in% selPlant)
+    
+    if (!input$chkShowOutliers & ("outlier" %in% colnames(df))) {
+      plants_to_plot <- plants_to_plot %>% filter(outlier == 0)
+    }
     
     # Normalize
     if (secVar == "none") {
@@ -147,6 +154,16 @@ server <- function(input, output) {
     if (is.null(df)) return(NULL)
     
     fill_plant_selection(df)
+  })
+  
+  output$chkShowOutliers <- renderUI({
+    df <-filedata()
+    if (is.null(df)) return(NULL)
+    if ("outlier" %in% colnames(df)) {
+      checkboxInput("chkShowOutliers", paste('Show outliers (', length(which(df$outlier==1)), ')', sep=''), TRUE)
+    } else {
+      checkboxInput("chkShowOutliers", 'No outliers detected, option ignored', FALSE)
+    }
   })
   
   output$cbNormalizationMethod <- renderUI({
@@ -255,11 +272,11 @@ server <- function(input, output) {
         gg <- gg +  facet_wrap(input$cbSplitScatter)
       }
       
-      gg <- gg + theme(legend.title = element_text(size=32, face = "bold"),
-                       legend.text=element_text(size=30),
-                       axis.text=element_text(size=10),
-                       axis.title=element_text(size=22,face="bold"),
-                       title = element_text(size=20))
+      # gg <- gg + theme(legend.title = element_text(size=32, face = "bold"),
+      #                  legend.text=element_text(size=30),
+      #                  axis.text=element_text(size=10),
+      #                  axis.title=element_text(size=22,face="bold"),
+      #                  title = element_text(size=20))
       
       gg 
     } else {
@@ -287,11 +304,11 @@ server <- function(input, output) {
                                    segment.color = "grey")
       }
       
-      gg <- gg + theme(legend.title = element_text(size=32, face = "bold"),
-                       legend.text=element_text(size=30),
-                       axis.text=element_text(size=20),
-                       axis.title=element_text(size=22,face="bold"),
-                       title = element_text(size=20))
+      # gg <- gg + theme(legend.title = element_text(size=32, face = "bold"),
+      #                  legend.text=element_text(size=30),
+      #                  axis.text=element_text(size=20),
+      #                  axis.title=element_text(size=22,face="bold"),
+      #                  title = element_text(size=20))
       
       if (input$cbMarginal == 'none') {
         if (input$cbSplitScatter != "none"){
