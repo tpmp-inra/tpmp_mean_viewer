@@ -42,11 +42,11 @@ ui <- pageWithSidebar(
     uiOutput("cbPlantSelection"),
     uiOutput("chkShowOutliers"),
     
-    uiOutput("cbNormalizationMethod"),
-    
     uiOutput("visualizedVariable"),
     uiOutput("secondaryVariable"),
     uiOutput("dotSize"),
+    uiOutput("groupMeansBy"),
+    uiOutput("colorDotsBy"),
     uiOutput("cbMarginal"),
     
     uiOutput("chkShowPlantName"),
@@ -78,6 +78,24 @@ server <- function(input, output) {
   filedata <- reactive({
     load_experience_csv(input)
   })
+
+  group_column_name <- reactive({
+    group_seaprator <- input$groupMeansBy
+    if (group_seaprator == 'none') {
+      'no_color'
+    } else {
+      paste('group', group_seaprator, 'xyz', sep = '_')
+    }
+  })
+  
+  dotColor_column_name <- reactive({
+    dotColor <- input$colorDotsBy
+    if (dotColor == 'none') {
+      'no_color'
+    } else {
+      paste('color', dotColor, 'xyz', sep = '_')
+    }
+  })
   
   # Print observation details
   output$observationInfo <- renderTable({
@@ -100,6 +118,10 @@ server <- function(input, output) {
     if (is.null(dotSize)) return(NULL)
     selPlant <- input$cbPlantSelection
     if (is.null(selPlant)) return(NULL)
+    groupMeansBy <- input$groupMeansBy
+    if (is.null(groupMeansBy)) return(NULL)
+    colorDotsBy <- input$colorDotsBy
+    if (is.null(colorDotsBy)) return(NULL)
     
     plants_to_plot <- 
       df %>%
@@ -111,24 +133,37 @@ server <- function(input, output) {
       plants_to_plot <- plants_to_plot %>% filter(outlier == 0)
     }
     
-    # Normalize
-    if (secVar == "none") {
-      yv = c(mainVar)
+    # Create color columns
+    gcn = group_column_name()
+    if (groupMeansBy != 'none') {
+      gcn.vector <- as.factor(plants_to_plot[,groupMeansBy][[1]])
+      if (length(unique(gcn.vector)) > 20) {
+        gcn.vector <- plants_to_plot[,groupMeansBy][[1]]
+      }
+      plants_to_plot <- 
+        plants_to_plot %>%
+        mutate(!!gcn := gcn.vector)
     } else {
-      yv = c(mainVar, secVar)
+      plants_to_plot <- 
+        plants_to_plot %>%
+        mutate(!!gcn := as.factor(1))
     }
-    if (input$cbNormalizationMethod == "normalization") {
-      normalize <- function(x) {
-        return((x-min(x)) / (max(x)-min(x)))
+    ccn = dotColor_column_name()
+    if (colorDotsBy != 'none') {
+      ccn.vector <- as.factor(plants_to_plot[,colorDotsBy][[1]])
+      if (length(unique(ccn.vector)) > 20) {
+        ccn.vector <- plants_to_plot[,colorDotsBy][[1]]
       }
-      plants_to_plot <- plants_to_plot %>% mutate_at(vars(yv), funs(normalize(.) %>% as.vector))
+      plants_to_plot <- 
+        plants_to_plot %>%
+        mutate(!!ccn := ccn.vector)
     } else {
-      if (input$cbNormalizationMethod == "scale") {
-        plants_to_plot <- plants_to_plot %>% mutate_at(vars(yv), funs(scale(.) %>% as.vector))
-      }
+      plants_to_plot <- 
+        plants_to_plot %>%
+        mutate(!!ccn := as.factor(1))
     }
     
-    if (dotSize == 'none') dotSize <- NULL
+    if (dotSize == 'none') dotSize <- 4
     
     return(list(df = plants_to_plot,
                 mainVar = mainVar,
@@ -148,6 +183,36 @@ server <- function(input, output) {
                              "count > 3")
   })
   
+  output$groupMeansBy <- renderUI({
+    df <-filedata()
+    if (is.null(df)) return(NULL)
+    dsnames <- names(df)
+    cb_options <- list()
+    cb_options[ dsnames] <- dsnames
+    cb_options <- cb_options[mixedorder(unlist(cb_options),decreasing=F)]
+    if ('treatment' %in% cb_options) {
+      selected_choice <- 'treatment'
+    } else {
+      selected_choice <- 'none'
+    }
+    selectInput("groupMeansBy", "Group means by:", choices = c('none', cb_options), selected = selected_choice)
+  })
+  
+  output$colorDotsBy <- renderUI({
+    df <-filedata()
+    if (is.null(df)) return(NULL)
+    dsnames <- names(df)
+    cb_options <- list()
+    cb_options[ dsnames] <- dsnames
+    cb_options <- cb_options[mixedorder(unlist(cb_options),decreasing=F)]
+    if ('treatment' %in% cb_options) {
+      selected_choice <- 'treatment'
+    } else {
+      selected_choice <- 'none'
+    }
+    selectInput("colorDotsBy", "Color dots by:", choices = c('none', cb_options), selected = selected_choice)
+  })
+  
   # Populate plants selector
   output$cbPlantSelection <- renderUI({
     df <-filedata()
@@ -164,12 +229,6 @@ server <- function(input, output) {
     } else {
       checkboxInput("chkShowOutliers", 'No outliers detected, option ignored', FALSE)
     }
-  })
-  
-  output$cbNormalizationMethod <- renderUI({
-    df <-filedata()
-    if (is.null(df)) return(NULL)
-    fill_normalization_cb()
   })
   
   #The following set of functions populate the x axis selectors
@@ -240,15 +299,15 @@ server <- function(input, output) {
     if (ptp$secVar == "none") {
       # Get the means
       gd <- ptp$df %>%
-        group_by(treatment) %>%
+        group_by_(group_column_name()) %>%
         summarise_at(.vars = ptp$mainVar, .funs = mean)
       
       # Plot
       gg <- ggplot(ptp$df, 
-                   aes_string(x = "treatment", 
+                   aes_string(x = group_column_name(), 
                               y = ptp$mainVar, 
                               # color="treatment", 
-                              fill="treatment"))
+                              fill= group_column_name()))
       
       if (input$cbSplitScatter != "none"){
         gg <- gg + geom_boxplot()
@@ -257,7 +316,7 @@ server <- function(input, output) {
         gg <- gg + geom_boxplot(width = 0.2)
       }
       
-      gg <- gg + geom_jitter(aes_string(size = ptp$dotSize), width = 0.3, alpha = 0.3)
+      gg <- gg + geom_jitter(aes_string(size = ptp$dotSize, color=dotColor_column_name()), width = 0.3, alpha = 0.3)
       
       if (input$chkShowPlantName) {
         gg <- gg + geom_text_repel(data = ptp$df,
@@ -281,16 +340,17 @@ server <- function(input, output) {
       gg 
     } else {
       gd <- ptp$df %>% 
-        group_by(treatment) %>% 
+        drop_na() %>%
+        group_by_(group_column_name()) %>%
         summarise_at(.vars = c(ptp$mainVar, ptp$secVar), .funs = mean)
       gg <- ggplot(ptp$df, aes_string(x = ptp$mainVar, 
                                       y = ptp$secVar, 
-                                      color="treatment"))
-      gg <- gg + geom_point(alpha = .3, aes_string(size = ptp$dotSize))
+                                      color = group_column_name()))
+      gg <- gg + geom_point(alpha = .3, aes_string(size = ptp$dotSize, color=dotColor_column_name()))
       if (input$cbSplitScatter == "none"){
         gg <- gg + geom_point(data = gd, size = 16)
         gg <- gg + geom_label_repel(data = gd, 
-                                    aes(label = treatment, color=treatment),
+                                    aes_string(label = group_column_name(), color = group_column_name()),
                                     size = 5,
                                     alpha = 0.8,
                                     segment.color = "grey")
@@ -298,8 +358,7 @@ server <- function(input, output) {
       
       if (input$chkShowPlantName) {
         gg <- gg + geom_text_repel(data = ptp$df,
-                                   aes(label = plant, color=treatment),
-                                   # color = "black",
+                                   aes_string(label = "plant", color = group_column_name()),
                                    size = 3.5,
                                    segment.color = "grey")
       }
