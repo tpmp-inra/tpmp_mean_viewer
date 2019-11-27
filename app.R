@@ -363,12 +363,6 @@ server <- function(input, output) {
                                    segment.color = "grey")
       }
       
-      # gg <- gg + theme(legend.title = element_text(size=32, face = "bold"),
-      #                  legend.text=element_text(size=30),
-      #                  axis.text=element_text(size=20),
-      #                  axis.title=element_text(size=22,face="bold"),
-      #                  title = element_text(size=20))
-      
       if (input$cbMarginal == 'none') {
         if (input$cbSplitScatter != "none"){
           gg <- gg +  facet_wrap(input$cbSplitScatter)
@@ -384,6 +378,11 @@ server <- function(input, output) {
         }
       }
     }
+    
+    # Remove legend
+    # if (nrow(unique(ptp$df[,group_column_name()])) > 40) {
+    #   gg <- gg + theme(legend.position = "none")
+    # }
   })
   
   #This previews the CSV data file
